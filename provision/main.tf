@@ -34,7 +34,6 @@ resource "aws_s3_bucket_acl" "bucket_acl" {
   acl    = "private"
 }
 
-
 data "archive_file" "lambda_coreapi_users_create" {
   type = "zip"
 
@@ -71,6 +70,43 @@ resource "aws_cloudwatch_log_group" "coreapi_users_create" {
   retention_in_days = 30
 }
 
+data "archive_file" "lambda_coreapi_login" {
+  type = "zip"
+
+  source_file  = "/home/stavros/go/bin/coreapi_login"
+  output_path = "/home/stavros/go/bin/coreapi_login.zip"
+}
+
+resource "aws_s3_object" "lambda_coreapi_login" {
+  bucket = aws_s3_bucket.lambda_bucket.id
+
+  key    = "coreapi_login.zip"
+  source = data.archive_file.lambda_coreapi_login.output_path
+
+  etag = filemd5(data.archive_file.lambda_coreapi_login.output_path)
+}
+
+resource "aws_lambda_function" "coreapi_login" {
+  function_name = "coreapi_login"
+
+  s3_bucket = aws_s3_bucket.lambda_bucket.id
+  s3_key    = aws_s3_object.lambda_coreapi_login.key
+
+  runtime = "go1.x"
+  handler = "coreapi_login"
+
+  source_code_hash = data.archive_file.lambda_coreapi_login.output_base64sha256
+
+  role = aws_iam_role.lambda_exec.arn
+}
+
+resource "aws_cloudwatch_log_group" "coreapi_login" {
+  name = "/aws/lambda/${aws_lambda_function.coreapi_login.function_name}"
+
+  retention_in_days = 30
+}
+
+
 resource "aws_iam_role" "lambda_exec" {
   name = "serverless_lambda"
 
@@ -98,66 +134,120 @@ resource "aws_iam_role_policy_attachment" "dynamodb_policy" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"
 }
 
-resource "aws_cloudwatch_log_group" "coreapi_gateway" {
-  name = "/aws/api_gw/${aws_api_gateway_rest_api.coreapi.name}"
+
+resource "aws_apigatewayv2_api" "coreapi" {
+  name          = "coreapi"
+  protocol_type = "HTTP"
+}
+
+resource "aws_apigatewayv2_stage" "coreapi_production" {
+  api_id = aws_apigatewayv2_api.coreapi.id
+
+  name        = "production"
+  auto_deploy = true
+
+  access_log_settings {
+     destination_arn = aws_cloudwatch_log_group.apigateway_coreapi.arn
+
+    format = jsonencode({
+      requestId               = "$context.requestId"
+      sourceIp                = "$context.identity.sourceIp"
+      requestTime             = "$context.requestTime"
+      protocol                = "$context.protocol"
+      httpMethod              = "$context.httpMethod"
+      resourcePath            = "$context.resourcePath"
+      routeKey                = "$context.routeKey"
+      status                  = "$context.status"
+      responseLength          = "$context.responseLength"
+      integrationErrorMessage = "$context.integrationErrorMessage"
+      caller                  = "$context.identity.caller"
+      userARN                 = "$context.identity.userArn"
+      }
+    )
+  }
+}
+
+resource "aws_apigatewayv2_integration" "coreapi_users_create" {
+  api_id = aws_apigatewayv2_api.coreapi.id
+
+  integration_type   = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri    = aws_lambda_function.coreapi_users_create.invoke_arn
+}
+
+resource "aws_apigatewayv2_route" "coreapi_users_create" {
+  api_id = aws_apigatewayv2_api.coreapi.id
+
+  route_key = "POST /users"
+  target    = "integrations/${aws_apigatewayv2_integration.coreapi_users_create.id}"
+}
+
+resource "aws_apigatewayv2_integration" "coreapi_login" {
+  api_id = aws_apigatewayv2_api.coreapi.id
+
+  integration_type   = "AWS_PROXY"
+  integration_method = "POST"
+  integration_uri    = aws_lambda_function.coreapi_login.invoke_arn
+}
+
+resource "aws_apigatewayv2_route" "coreapi_login" {
+  api_id = aws_apigatewayv2_api.coreapi.id
+
+  route_key = "POST /login"
+  target    = "integrations/${aws_apigatewayv2_integration.coreapi_login.id}"
+}
+
+resource "aws_apigatewayv2_domain_name" "core_rinthine_com" {
+  domain_name = "core.rinthine.com"
+
+  domain_name_configuration {
+    certificate_arn = "arn:aws:acm:us-east-1:562555332644:certificate/6be46e8e-6278-4c33-b4db-b314e4f7e8c7"
+    endpoint_type   = "REGIONAL"
+    security_policy = "TLS_1_2"
+  }
+}
+
+data "aws_route53_zone" "rinthine_com" {
+  name = "rinthine.com."
+  private_zone = false
+}
+
+resource "aws_route53_record" "core" {
+  name    = aws_apigatewayv2_domain_name.core_rinthine_com.domain_name
+  type    = "A"
+  zone_id = data.aws_route53_zone.rinthine_com.zone_id
+
+  alias {
+    name                   = aws_apigatewayv2_domain_name.core_rinthine_com.domain_name_configuration[0].target_domain_name
+    zone_id                = aws_apigatewayv2_domain_name.core_rinthine_com.domain_name_configuration[0].hosted_zone_id
+    evaluate_target_health = false
+  }
+}
+
+resource "aws_apigatewayv2_api_mapping" "core_rinthine_com" {
+  api_id      = aws_apigatewayv2_api.coreapi.id
+  domain_name = aws_apigatewayv2_domain_name.core_rinthine_com.id
+  stage       = aws_apigatewayv2_stage.coreapi_production.id
+}
+
+resource "aws_cloudwatch_log_group" "apigateway_coreapi" {
+  name = "/aws/api_gw/${aws_apigatewayv2_api.coreapi.name}"
 
   retention_in_days = 30
 }
 
-resource "aws_api_gateway_rest_api" "coreapi" {
-  name        = "CoreAPI"
-  description = "Rinthine Core API"
-}
-
-resource "aws_api_gateway_resource" "coreapi_users" {
-  rest_api_id = aws_api_gateway_rest_api.coreapi.id
-  parent_id   = aws_api_gateway_rest_api.coreapi.root_resource_id
-  path_part   = "users"
-}
-
-resource "aws_api_gateway_method" "coreapi_users_create" {
-  rest_api_id   = aws_api_gateway_rest_api.coreapi.id
-  resource_id   = aws_api_gateway_resource.coreapi_users.id
-  http_method   = "POST"
-  authorization = "NONE"
-}
-
-resource "aws_api_gateway_integration" "coreapi_users_create" {
-  rest_api_id = aws_api_gateway_rest_api.coreapi.id
-  resource_id = aws_api_gateway_method.coreapi_users_create.resource_id
-  http_method = aws_api_gateway_method.coreapi_users_create.http_method
-
-  integration_http_method = "POST"
-  type                    = "AWS_PROXY"
-  uri                     = aws_lambda_function.coreapi_users_create.invoke_arn
-}
-
-resource "aws_api_gateway_deployment" "coreapi_production" {
-  depends_on = [
-    aws_api_gateway_integration.coreapi_users_create,
-  ]
-
-  rest_api_id = "${aws_api_gateway_rest_api.coreapi.id}"
-  stage_name  = "production"
-}
-
-resource "aws_api_gateway_base_path_mapping" "api" {
-  depends_on = [
-    aws_api_gateway_deployment.coreapi_production
-  ]
-  api_id      = aws_api_gateway_rest_api.coreapi.id
-  stage_name  = aws_api_gateway_deployment.coreapi_production.stage_name
-  domain_name = "api.rinthine.com"
-}
-
-resource "aws_lambda_permission" "apigw" {
-  statement_id  = "AllowAPIGatewayInvoke"
+resource "aws_lambda_permission" "apigateway_coreapi_users_create" {
+  statement_id  = "AllowExecutionFromAPIGateway"
   action        = "lambda:InvokeFunction"
-  function_name =  aws_lambda_function.coreapi_users_create.function_name
+  function_name = aws_lambda_function.coreapi_users_create.function_name
   principal     = "apigateway.amazonaws.com"
-
-  # The /*/* portion grants access from any method on any resource
-  # within the API Gateway "REST API".
-  source_arn = "${aws_api_gateway_rest_api.coreapi.execution_arn}/*/*/*"
+  source_arn = "${aws_apigatewayv2_api.coreapi.execution_arn}/*/*/*"
 }
 
+resource "aws_lambda_permission" "apigateway_coreapi_login" {
+  statement_id  = "AllowExecutionFromAPIGateway"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.coreapi_login.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn = "${aws_apigatewayv2_api.coreapi.execution_arn}/*/*/*"
+}

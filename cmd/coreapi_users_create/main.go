@@ -54,13 +54,18 @@ func HandleRequest(ctx context.Context, e events.APIGatewayProxyRequest) (events
 
 	existing_user, err := coreops.GetUser(req.Handle)
 	if existing_user != nil || err != nil {
+		body := "handle taken"
+		if err != nil {
+			body = err.Error()
+		}
 		return events.APIGatewayProxyResponse{
 			StatusCode: 400,
-			Body:       "handle taken",
+			Body:       body,
 		}, nil
 	}
 
 	user := coreops.User{
+		UserId:    coreops.GenId(),
 		Handle:    req.Handle,
 		Name:      req.Name,
 		Email:     req.Email,
@@ -92,3 +97,4 @@ func HandleRequest(ctx context.Context, e events.APIGatewayProxyRequest) (events
 func main() {
 	lambda.Start(HandleRequest)
 }
+

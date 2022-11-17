@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/binary"
 	"fmt"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -14,18 +16,47 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+type UserHandle struct {
+	Handle string `dynamodbav:"handle"`
+	UserId []byte `dynamodbav:"userid"`
+}
+
+type UserId struct {
+	UserId []byte `dynamodbav:"userid"`
+	Handle string `dynamodbav:"handle"`
+}
+
 type User struct {
-	Handle    string `json:"handle" dynamodbav:"handle"`
-	Name      string `json:"name" dynamodbav:"name"`
-	Email     string `json:"email" dynamodbav:"email"`
-	Password  string `json:"password" dynamodbav:"password"`
-	AvatarUrl string `json:"avatar_url" dynamodbav:"avatar_url"`
-	CreatedAt int64  `json:"created_at" dynamodbav:"created_at"`
+	UserId    []byte `dynamodbav:"userid"`
+	Handle    string `dynamodbav:"handle"`
+	Name      string `dynamodbav:"name"`
+	Email     string `dynamodbav:"email"`
+	Password  string `dynamodbav:"password"`
+	AvatarUrl string `dynamodbav:"avatar_url"`
+	CreatedAt int64  `dynamodbav:"created_at"`
 }
 
 type UserToken struct {
-	Token string `json:"token" dynamodbav:"token_"`
-	User  string `json:"user" dynamodbav:"user"`
+	Token string `dynamodbav:"token_"`
+	User  string `dynamodbav:"user"`
+	App   string `dynamodbav:"app"`
+}
+
+func SecureRandUint32() uint32 {
+	buffer := make([]byte, 4);
+	n, err := rand.Read(buffer)
+	if n != 4 || err != nil {
+		panic(err)
+	}
+	return binary.LittleEndian.Uint32(buffer)
+}
+
+func GenId() []byte {
+	var start uint64 = 1641024000 // 1/1/2022 00:00:00
+	v := ((uint64(time.Now().Unix()) - start) << 32) + uint64(SecureRandUint32())
+	id := make([]byte, 8)
+	binary.LittleEndian.PutUint64(id, v)
+	return id
 }
 
 func VerifyPassword(user *User, password string) bool {
@@ -63,7 +94,7 @@ func CreateUserToken(handle string) (string, error) {
 		User:  handle,
 	}
 
-	cfg, err := config.LoadDefaultConfig(context.TODO())
+	cfg, _ := config.LoadDefaultConfig(context.TODO())
 
 	db := dynamodb.NewFromConfig(cfg)
 	item, err := attributevalue.MarshalMap(userToken)
@@ -79,13 +110,39 @@ func CreateUserToken(handle string) (string, error) {
 	return token, err
 }
 
-func GetUser(handle string) (*User, error) {
-	cfg, err := config.LoadDefaultConfig(context.TODO())
+func GetUserId(handle string) ([]byte, error) {
+	cfg, _ := config.LoadDefaultConfig(context.TODO())
 	db := dynamodb.NewFromConfig(cfg)
-
 	result, err := db.GetItem(context.TODO(), &dynamodb.GetItemInput{
 		Key: map[string]types.AttributeValue{
 			"handle": &types.AttributeValueMemberS{Value: handle},
+		},
+		TableName: aws.String("core_userhandles"),
+	})
+	if err != nil || result.Item == nil {
+		return nil, err
+	}
+
+	var userid UserId
+	if err = attributevalue.UnmarshalMap(result.Item, &userid); err != nil {
+		return nil, fmt.Errorf("Internal Error")
+	}
+	return userid.UserId, nil
+	
+}
+
+func GetUser(handle string) (*User, error) {
+	cfg, _ := config.LoadDefaultConfig(context.TODO())
+	db := dynamodb.NewFromConfig(cfg)
+
+	userid, err := GetUserId(handle)
+	if userid == nil || err != nil {
+		return nil, err
+	}
+
+	result, err := db.GetItem(context.TODO(), &dynamodb.GetItemInput{
+		Key: map[string]types.AttributeValue{
+			"userid": &types.AttributeValueMemberB{Value: userid},
 		},
 		TableName: aws.String("core_users"),
 	})
@@ -100,19 +157,62 @@ func GetUser(handle string) (*User, error) {
 	return &user, nil
 }
 
-func CreateUser(user *User) error {
-	cfg, err := config.LoadDefaultConfig(context.TODO())
 
+// Some race conditions here, but we don't care much
+func ReserveHandle(user *User) error {
+	handle := UserHandle{
+		Handle: user.Handle,
+		UserId: user.UserId,
+	}
+
+	userid := UserId{
+		UserId: user.UserId,
+		Handle: user.Handle,
+	}
+
+	cfg, _ := config.LoadDefaultConfig(context.TODO())
+	db := dynamodb.NewFromConfig(cfg)
+
+	handleitem, err := attributevalue.MarshalMap(handle)
+	if err != nil {
+		return fmt.Errorf("Failed to marshall request")
+	}
+	_, err = db.PutItem(context.TODO(), &dynamodb.PutItemInput{
+		Item:                handleitem,
+		TableName:           aws.String("core_userhandles"),
+		ConditionExpression: aws.String("attribute_not_exists(handle)"),
+	})
+
+	useriditem, err := attributevalue.MarshalMap(userid)
+	if err != nil {
+		return fmt.Errorf("Failed to marshall request")
+	}
+	_, err = db.PutItem(context.TODO(), &dynamodb.PutItemInput{
+		Item:                useriditem,
+		TableName:           aws.String("core_userids"),
+		ConditionExpression: aws.String("attribute_not_exists(userid)"),
+	})
+
+	return err
+}
+
+func CreateUser(user *User) error {
+
+	cfg, _ := config.LoadDefaultConfig(context.TODO())
 	db := dynamodb.NewFromConfig(cfg)
 	item, err := attributevalue.MarshalMap(user)
 	if err != nil {
 		return fmt.Errorf("Failed to marshall request")
 	}
 
+	err = ReserveHandle(user)
+	if err != nil {
+		return err
+	}
+
 	_, err = db.PutItem(context.TODO(), &dynamodb.PutItemInput{
 		Item:                item,
 		TableName:           aws.String("core_users"),
-		ConditionExpression: aws.String("attribute_not_exists(handle)"),
 	})
 
 	return err
