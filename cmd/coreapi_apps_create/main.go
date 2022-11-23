@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
+	"github.com/rinthine/pkg/coreops"
+	
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 )
@@ -46,10 +47,28 @@ func HandleRequest(ctx context.Context, e events.APIGatewayProxyRequest) (events
 			Body:       err.Error(),
 		}, nil
 	}
-	output, _ := e.Headers["authorization"]
+	
+	authstring, _ := e.Headers["authorization"]
+	token, err := coreops.BearerToken(authstring)
+	if err != nil {
+		return events.APIGatewayProxyResponse{
+			StatusCode: 400,
+			Body:       err.Error(),
+		}, nil
+	}
+
+	user, err := coreops.BearerAuthenticate(token)
+	if err != nil {
+		return events.APIGatewayProxyResponse{
+			StatusCode: 400,
+			Body:       err.Error(),
+		}, nil
+	}
+
+	data, err := json.Marshal(user)
 	return events.APIGatewayProxyResponse{
 		StatusCode: 200,
-		Body:       fmt.Sprintf("%s##", strings.Split(output, " ")[0]),
+		Body:       string(data),
 	}, nil
 }
 
