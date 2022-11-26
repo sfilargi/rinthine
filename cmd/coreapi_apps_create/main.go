@@ -6,15 +6,15 @@ import (
 	"fmt"
 
 	"github.com/rinthine/pkg/coreops"
-	
+
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 )
 
 type AppCreateRequest struct {
-	Name     string `json:"name"`
+	Name        string `json:"name"`
 	Description string `json:"description"`
-	HomeUrl string `json:"home_url"`
+	HomeUrl     string `json:"home_url"`
 	RedirectUrl string `json:"redirect_url"`
 }
 
@@ -47,7 +47,7 @@ func HandleRequest(ctx context.Context, e events.APIGatewayProxyRequest) (events
 			Body:       err.Error(),
 		}, nil
 	}
-	
+
 	authstring, _ := e.Headers["authorization"]
 	token, err := coreops.BearerToken(authstring)
 	if err != nil {
@@ -65,10 +65,26 @@ func HandleRequest(ctx context.Context, e events.APIGatewayProxyRequest) (events
 		}, nil
 	}
 
-	data, err := json.Marshal(user)
+	app := coreops.App{
+		Name:        req.Name,
+		User:        user.Handle,
+		Description: req.Description,
+		HomeUrl:     req.HomeUrl,
+		RedirectUrl: req.RedirectUrl,
+		Password:    coreops.RandomString(36),
+	}
+
+	err = coreops.CreateApp(&app)
+	if err != nil {
+		return events.APIGatewayProxyResponse{
+			StatusCode: 400,
+			Body:       err.Error(),
+		}, nil
+	}
+
 	return events.APIGatewayProxyResponse{
 		StatusCode: 200,
-		Body:       string(data),
+		Body:       app.Password,
 	}, nil
 }
 

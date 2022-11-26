@@ -1,22 +1,11 @@
-resource "aws_dynamodb_table" "core_userhandles" {
-  name           = "core_user_handles"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "handle"
-
-  attribute {
-    name = "handle"
-    type = "S"
-  }
-}
-
 resource "aws_dynamodb_table" "core_users" {
   name           = "core_users"
   billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "userid"
+  hash_key       = "handle_"
 
   attribute {
-    name = "userid"
-    type = "B"
+    name = "handle_"
+    type = "S"
   }
 }
 
@@ -31,42 +20,31 @@ resource "aws_dynamodb_table" "core_user_tokens" {
   }
 }
 
-resource "aws_dynamodb_table" "core_app_names" {
-  name           = "core_app_names"
-  billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "name"
-
-  attribute {
-    name = "name"
-    type = "S"
-  }
-}
-
 resource "aws_dynamodb_table" "core_apps" {
   name           = "core_apps"
   billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "appid"
+  hash_key       = "name_"
 
   attribute {
-    name = "appid"
-    type = "B"
+    name = "name_"
+    type = "S"
   }
 }
 
 resource "aws_dynamodb_table" "core_user_apps" {
   name           = "core_user_apps"
   billing_mode   = "PAY_PER_REQUEST"
-  hash_key       = "userid"
-  range_key      = "appid"
+  hash_key       = "user_"
+  range_key      = "app_"
 
   attribute {
-    name = "userid"
-    type = "B"
+    name = "user_"
+    type = "S"
   }
 
   attribute {
-    name = "appid"
-    type = "B"
+    name = "app_"
+    type = "S"
   }
 }
 

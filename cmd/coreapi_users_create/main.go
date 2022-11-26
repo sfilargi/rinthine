@@ -52,11 +52,11 @@ func HandleRequest(ctx context.Context, e events.APIGatewayProxyRequest) (events
 		}, nil
 	}
 
-	existing_user, err := coreops.GetUserByHandle(req.Handle)
+	existing_user, err := coreops.GetUser(req.Handle)
 	if existing_user != nil || err != nil {
 		body := "handle taken"
 		if err != nil {
-			body = err.Error()
+			body = fmt.Sprintf("oops: %s", err.Error())
 		}
 		return events.APIGatewayProxyResponse{
 			StatusCode: 400,
@@ -65,7 +65,6 @@ func HandleRequest(ctx context.Context, e events.APIGatewayProxyRequest) (events
 	}
 
 	user := coreops.User{
-		UserId:    coreops.GenId(),
 		Handle:    req.Handle,
 		Name:      req.Name,
 		Email:     req.Email,
@@ -75,11 +74,11 @@ func HandleRequest(ctx context.Context, e events.APIGatewayProxyRequest) (events
 	if err := coreops.CreateUser(&user); err != nil {
 		return events.APIGatewayProxyResponse{
 			StatusCode: 400,
-			Body:       err.Error(),
+			Body:       fmt.Sprintf("oops 2: %s", err.Error()),
 		}, nil
 	}
 
-	token, err := coreops.CreateUserToken(user.UserId)
+	token, err := coreops.CreateUserToken(user.Handle)
 	if err != nil {
 		// hmm, do we return success or failure here?
 		return events.APIGatewayProxyResponse{
@@ -97,4 +96,3 @@ func HandleRequest(ctx context.Context, e events.APIGatewayProxyRequest) (events
 func main() {
 	lambda.Start(HandleRequest)
 }
-
