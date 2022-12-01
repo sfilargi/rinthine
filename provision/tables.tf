@@ -48,4 +48,58 @@ resource "aws_dynamodb_table" "core_user_apps" {
   }
 }
 
+resource "aws_dynamodb_table" "core_oauth_codes" {
+  name           = "core_oauth_codes"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "code_"
 
+  attribute {
+    name = "code_"
+    type = "S"
+  }
+}
+
+resource "aws_dynamodb_table" "core_oauth_used_codes" {
+  name           = "core_oauth_used_codes"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "code_"
+
+  attribute {
+    name = "code_"
+    type = "S"
+  }
+}
+
+resource "aws_dynamodb_table" "core_app_codes" {
+  name           = "core_app_codes"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "app_"
+  range_key      = "code_"
+
+  attribute {
+    name = "app_"
+    type = "S"
+  }
+
+  attribute {
+    name = "code_"
+    type = "S"
+  }
+}
+
+resource "aws_dynamodb_table" "core_app_tokens" {
+  name           = "core_app_tokens"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "app_"
+  range_key      = "token_"
+
+  attribute {
+    name = "app_"
+    type = "S"
+  }
+
+  attribute {
+    name = "token_"
+    type = "S"
+  }
+}
