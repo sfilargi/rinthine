@@ -1,0 +1,21 @@
+[
+    {
+	"type_name": "user",
+	"table_name": "core_users",
+	"schema": {
+	    "user_id": "B",
+	    "handle": "S",
+	    "email": "S",
+	    "password": "S",
+	    "avatar_url": "S"
+	},
+	"partition_key": "user_id",
+	"sort_key": null,
+	"indexes": [
+	    {
+		"type": "unique",
+		"field": "handle"
+	    }
+	]
+    }
+]

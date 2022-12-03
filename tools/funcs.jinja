@@ -1,0 +1,99 @@
+func {{camel_type_name}}PutTx(item *{{camel_type_name}}) *types.TransactWriteItem {
+
+    i, err := attributevalue.MarshalMap(item)
+    if err != nil {
+    	panic(err)
+    }
+
+    return &types.TransactWriteItem{
+     	    Put: &types.Put{
+	        Item: i,
+		TableName: aws.String("{{table_name}}"),
+		ConditionExpression:
+			aws.String(
+				fmt.Sprintf(
+				{% if sort_key %}
+				"attribute_not_exists(%s) AND attribute_not_exists(%s)",
+				"{{dynamo_partition_key_name}}", "{{dynamo_sort_key_name}}")),
+				{% else %}
+				"attribute_not_exists(%s)", "{{dynamo_partition_key_name}}")),
+				{% endif %}
+	    },
+     }
+}
+
+{% if index_data %}
+func {{camel_type_name}}Put(item *{{camel_type_name}}) error {
+
+    _, err := Db.TransactWriteItems(context.TODO(), &dynamodb.TransactWriteItemsInput{
+		TransactItems: []types.TransactWriteItem{
+    {% for idx in index_data %}
+      *{{idx['v']['camel_type_name']}}PutTx(&{{idx['v']['camel_type_name']}}{
+	{{idx['v']['partition_key_go_name']}}: item.{{idx['v']['partition_key_go_name']}},
+	{{partition_key_go_name}}: item.{{partition_key_go_name}},
+      }),
+    {% endfor %}
+    *{{camel_type_name}}PutTx(item),
+    }})
+
+    return err
+}
+{% else %}
+func {{camel_type_name}}Put(item *{{camel_type_name}}) error {
+    i, err := attributevalue.MarshalMap(item)
+    if err != nil {
+    	return err
+    }
+
+    _, err = Db.PutItem(context.TODO(), &dynamodb.PutItemInput{
+     	Item:      i,
+	TableName: aws.String("{{table_name}}"),
+	ConditionExpression:
+	  aws.String(
+	    fmt.Sprintf(
+	    {% if sort_key %}
+	      "attribute_not_exists(%s) AND attribute_not_exists(%s)",
+	      "{{dynamo_partition_key_name}}", "{{dynamo_sort_key_name}}",
+	    {% else %}
+	      "attribute_not_exists(%s)", "{{dynamo_partition_key_name}}",
+	    {% endif %}
+	  ))})
+    return err
+}
+{% endif %}
+
+{% if sort_key %}
+func {{camel_type_name}}Get(pkey {{partition_key_go_type}}, skey {{sort_key_go_type}}) (*{{camel_type_name}}, error) {
+{% else %}
+func {{camel_type_name}}Get(pkey {{partition_key_go_type}}) (*{{camel_type_name}}, error) {
+{% endif %}
+	result, err := Db.GetItem(context.TODO(), &dynamodb.GetItemInput{
+		TableName: aws.String("{{table_name}}"),
+		Key: map[string]types.AttributeValue{
+			"{{dynamo_partition_key_name}}": &types.AttributeValueMember{{partition_key_dynamo_type}}{Value: pkey},
+			{% if sort_key %}
+			"{{dynamo_sort_key_name}}": &types.AttributeValueMember{{sort_key_dynamo_type}}{Value: skey},
+			{% endif %}
+		},
+	})
+	if result.Item == nil || err != nil {
+		return nil, err
+	}
+
+        var item {{camel_type_name}}
+	if err = attributevalue.UnmarshalMap(result.Item, &item); err != nil {
+	   panic(err)
+	}
+	return &item, nil
+}
+
+{% for idx in index_data %}
+func {{camel_type_name}}GetFrom{{idx['v']['partition_key_go_name']}}(k {{idx['v']['partition_key_go_type']}}) (*{{camel_type_name}}, error) {
+     fk, err := {{idx['v']['camel_type_name']}}Get(k)
+     if fk == nil || err != nil {
+     	return nil, err
+     }
+
+     return {{camel_type_name}}Get(fk.{{partition_key_go_name}})
+}
+{% endfor %}
