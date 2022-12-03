@@ -7,20 +7,7 @@ import (
 )
 
 func main() {
+	a, b, c := coreops.Authorize("stavros_app", "stavros", "secret")
 
-	app := coreops.App{
-		Name:        "testapp",
-		User:        "stavros",
-		Description: "",
-		HomeUrl:     "",
-		RedirectUrl: "",
-		Password:    coreops.RandomString(36),
-	}
-
-	err := coreops.CreateApp(&app)
-	if err != nil {
-		fmt.Printf("%s", err)
-	} else {
-		fmt.Printf("OK")
-	}
+	fmt.Printf("%+v %+v %+v\n", a, b, c)
 }

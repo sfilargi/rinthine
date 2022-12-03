@@ -78,7 +78,7 @@ func HandleRequest(ctx context.Context, e events.APIGatewayProxyRequest) (events
 		}, nil
 	}
 
-	token, err := coreops.CreateUserToken(user.Handle)
+	token, err := coreops.CreateUserToken(user.Handle, "")
 	if err != nil {
 		// hmm, do we return success or failure here?
 		return events.APIGatewayProxyResponse{

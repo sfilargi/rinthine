@@ -22,12 +22,12 @@ type AppCreateRequest struct {
 // Password must not be empty
 // Email and Password "validation" is left to front end. We don't care
 // We don't sanitize!
-func verifyInput(req *AppCreateRequest) error {
+func verifyInput(req *AppCreateRequest) Failure {
 	if len(req.Name) < 6 {
-		return fmt.Errorf("name must be 6+ characters long")
+		return InvalidName
 	}
 	if len(req.RedirectUrl) == 0 {
-		return fmt.Errorf("redirect_url canot be empty")
+		return NoRedirectUrl
 	}
 	return nil
 }
@@ -41,11 +41,8 @@ func HandleRequest(ctx context.Context, e events.APIGatewayProxyRequest) (events
 			Body:       err.Error(),
 		}, nil
 	}
-	if err := verifyInput(&req); err != nil {
-		return events.APIGatewayProxyResponse{
-			StatusCode: 400,
-			Body:       err.Error(),
-		}, nil
+	if f := verifyInput(&req); f != nil {
+		return f
 	}
 
 	authstring, _ := e.Headers["authorization"]

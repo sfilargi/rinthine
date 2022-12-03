@@ -1,50 +1,19 @@
 package coreops
 
 import (
-	"context"
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/binary"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/rinthine/pkg/model"
+	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 )
-
-type User struct {
-	Handle    string `json:"handle" dynamodbav:"handle_"`
-	Name      string `json:"name" dynamodbav:"name_"`
-	Email     string `json:"email" dynamodbav:"email_"`
-	Password  string `json:"-" dynamodbav:"password_"`
-	AvatarUrl string `json:"avatar_url" dynamodbav:"avatar_url_"`
-	CreatedAt int64  `json:"created_at" dynamodbav:"created_at_"`
-}
-
-type UserToken struct {
-	Token string `dynamodbav:"token_"`
-	User  string `dynamodbav:"user_"`
-	App   string `dynamodbav:"app_"`
-}
-
-type App struct {
-	Name        string `json:"name" dynamodbav:"name_"`
-	User        string `json:"user" dynamodbav:"user_"`
-	Description string `json:"description" dynamodbav:"description_"`
-	HomeUrl     string `json:"home_url" dynamodbav:"home_url_"`
-	RedirectUrl string `json:"redirect_url" dynamodbav:"redirect_url_"`
-	Password    string `json:"-" dynamodbav:"password_"`
-}
-
-type UserApp struct {
-	User string `json:"user" dynamodbav:"user_"`
-	App  string `json:"app" dynamodbav:"app_"`
-}
 
 func SecureRandUint32() uint32 {
 	buffer := make([]byte, 4)
@@ -63,7 +32,16 @@ func GenId() []byte {
 	return id
 }
 
-func VerifyPassword(user *User, password string) bool {
+func RandomString(count int) string {
+	buf := make([]byte, count)
+	_, err := rand.Read(buf)
+	if err != nil {
+		panic(err)
+	}
+	return base64.RawURLEncoding.EncodeToString(buf)
+}
+
+func VerifyPassword(user *model.User, password string) bool {
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
 		return false
 	}
@@ -78,74 +56,42 @@ func HashPassword(password string) string {
 	return string(bytes)
 }
 
-func RandomString(count int) string {
-	buf := make([]byte, count)
-	_, err := rand.Read(buf)
-	if err != nil {
-		panic(err)
-	}
-	return base64.RawURLEncoding.EncodeToString(buf)
-}
-
-func CreateUserToken(user string) (string, error) {
-
-	userToken := UserToken{
-		Token: RandomString(36),
-		User:  user,
+func CreateToken(userId []byte, appId []byte) (string, error) {
+	token := model.Token{
+		Token:  RandomString(36),
+		UserId: userId,
+		AppId:  appId,
 	}
 
-	cfg, _ := config.LoadDefaultConfig(context.TODO())
-
-	db := dynamodb.NewFromConfig(cfg)
-	item, err := attributevalue.MarshalMap(userToken)
+	err := model.TokenPut(&token)
 	if err != nil {
+		zap.S().Error(err.Error())
 		return "", err
 	}
 
-	_, err = db.PutItem(context.TODO(), &dynamodb.PutItemInput{
-		Item:                item,
-		TableName:           aws.String("core_user_tokens"),
-		ConditionExpression: aws.String("attribute_not_exists(token_)"),
-	})
-	return userToken.Token, err
+	return token.Token, nil
 }
 
-func GetUser(handle string) (*User, error) {
-	cfg, _ := config.LoadDefaultConfig(context.TODO())
-	db := dynamodb.NewFromConfig(cfg)
-
-	result, err := db.GetItem(context.TODO(), &dynamodb.GetItemInput{
-		TableName: aws.String("core_users"),
-		Key: map[string]types.AttributeValue{
-			"handle_": &types.AttributeValueMemberS{Value: handle},
-		},
-	})
-	if result.Item == nil || err != nil {
+func GetUserFromHandle(handle string) (*model.User, error) {
+	user, err := model.UserGetFromHandle(handle)
+	if err != nil {
+		zap.S().Error(err.Error())
 		return nil, err
 	}
-
-	var user User
-	if err = attributevalue.UnmarshalMap(result.Item, &user); err != nil {
-		return nil, fmt.Errorf("Internal Error")
-	}
-	return &user, nil
+	return user, nil
 }
 
-func CreateUser(user *User) error {
-	cfg, _ := config.LoadDefaultConfig(context.TODO())
-	db := dynamodb.NewFromConfig(cfg)
-	item, err := attributevalue.MarshalMap(user)
+func GetUser(userId []byte) (*model.User, error) {
+	user, err := model.UserGet(userId)
 	if err != nil {
-		return fmt.Errorf("Failed to marshall request")
+		zap.S().Error(err.Error())
+		return nil, err
 	}
+	return user, nil
+}
 
-	_, err = db.PutItem(context.TODO(), &dynamodb.PutItemInput{
-		Item:                item,
-		TableName:           aws.String("core_users"),
-		ConditionExpression: aws.String("attribute_not_exists(handle_)"),
-	})
-
-	return err
+func CreateUser(user *model.User) error {
+	return model.UserPut(user)
 }
 
 func BearerToken(authstring string) (string, error) {
@@ -160,129 +106,138 @@ func BearerToken(authstring string) (string, error) {
 	return ss[1], nil
 }
 
-func GetUserToken(token string) (*UserToken, error) {
-	cfg, _ := config.LoadDefaultConfig(context.TODO())
-	db := dynamodb.NewFromConfig(cfg)
-
-	result, err := db.GetItem(context.TODO(), &dynamodb.GetItemInput{
-		TableName: aws.String("core_user_tokens"),
-		Key: map[string]types.AttributeValue{
-			"token_": &types.AttributeValueMemberS{Value: token},
-		},
-	})
-	if err != nil || result.Item == nil {
-		return nil, err
+func BasicCredentials(authstring string) (string, string, error) {
+	ss := strings.SplitN(authstring, " ", 2)
+	if len(ss) != 2 {
+		return "", "", fmt.Errorf("Couldn't parse Authorization header %s, %v, %d",
+			authstring, ss, len(ss))
+	}
+	if !strings.EqualFold(ss[0], "Basic") {
+		return "", "", fmt.Errorf("Not a Basic Authorization")
 	}
 
-	var userToken UserToken
-	if err = attributevalue.UnmarshalMap(result.Item, &userToken); err != nil {
-		return nil, fmt.Errorf("Internal Error")
+	pair, err := base64.StdEncoding.DecodeString(ss[1])
+	if err != nil {
+		return "", "", fmt.Errorf("Failed to decode Basic Authentication username/password")
 	}
-	return &userToken, nil
+
+	up := strings.SplitN(string(pair), ":", 2)
+	if len(up) != 2 {
+		zap.S().Warn("Couldn't find : in username/password string",
+			"authstring", authstring,
+			"decoded", string(pair))
+		return "", "", fmt.Errorf("Couldn't find : in username/password string")
+	}
+
+	return up[0], up[1], nil
 }
 
-func BearerAuthenticate(token string) (*User, error) {
-	userToken, err := GetUserToken(token)
+func GetToken(token string) (*model.Token, error) {
+	return model.TokenGet(token)
+}
+
+func BearerAuthenticate(token string) (*model.User, error) {
+	userToken, err := GetToken(token)
 	if userToken == nil || err != nil {
 		return nil, err
 	}
 
-	user, err := GetUser(userToken.User)
+	user, err := GetUser(userToken.UserId)
 	return user, nil
 }
 
-func GetApp(name string) (*App, error) {
-	cfg, _ := config.LoadDefaultConfig(context.TODO())
-	db := dynamodb.NewFromConfig(cfg)
+func GetApp(appId []byte) (*model.App, error) {
+	return model.AppGet(appId)
+}
 
-	result, err := db.GetItem(context.TODO(), &dynamodb.GetItemInput{
-		TableName: aws.String("core_apps"),
-		Key: map[string]types.AttributeValue{
-			"name_": &types.AttributeValueMemberS{Value: name},
-		},
+func CreateApp(app *model.App) error {
+	return model.AppPut(app)
+}
+
+func CreateAppCode(app *model.App, user *model.User) string {
+
+	code := RandomString(36)
+
+	err := model.OauthCodePut(&model.OauthCode{
+		Code:   code,
+		AppId:  app.AppId,
+		UserId: user.UserId,
 	})
-	if err != nil || result.Item == nil {
+	if err != nil {
+		panic(err)
+	}
+
+	return code
+}
+
+func GetOauthCode(app *model.App, code string) (*model.OauthCode, error) {
+	oauth, err := model.OauthCodeGet(code)
+	if err != nil {
 		return nil, err
 	}
 
-	var app App
-	if err = attributevalue.UnmarshalMap(result.Item, &app); err != nil {
-		return nil, fmt.Errorf("Internal Error")
+	if bytes.Compare(oauth.AppId, app.AppId) != 0 {
+		return nil, fmt.Errorf("Not found")
 	}
-	return &app, nil
+
+	return oauth, nil
 }
 
-func GetUserApp(user string) (*App, error) {
-	cfg, _ := config.LoadDefaultConfig(context.TODO())
-	db := dynamodb.NewFromConfig(cfg)
-
-	result, err := db.Query(context.TODO(), &dynamodb.QueryInput{
-		TableName:              aws.String("core_user_apps"),
-		KeyConditionExpression: aws.String("user_ = :user"),
-		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":user": &types.AttributeValueMemberS{Value: user},
-		},
-		Limit: aws.Int32(1),
-	})
-	if err != nil || len(result.Items) == 0 {
-		return nil, err
-	}
-
-	var userApp UserApp
-	if err = attributevalue.UnmarshalMap(result.Items[0], &userApp); err != nil {
-		return nil, fmt.Errorf("Internal Error")
-	}
-
-	return GetApp(userApp.App)
-}
-
-func CreateUserApp(user, app string) error {
-
-	old, err := GetUserApp(user)
-	if old != nil {
-		return fmt.Errorf("Only one app allowed")
-	}
-	if err != nil {
-		return err
-	}
-
-	cfg, _ := config.LoadDefaultConfig(context.TODO())
-	db := dynamodb.NewFromConfig(cfg)
-	item, err := attributevalue.MarshalMap(UserApp{
-		User: user,
-		App:  app,
-	})
-	if err != nil {
-		return fmt.Errorf("Failed to marshall request")
-	}
-
-	_, err = db.PutItem(context.TODO(), &dynamodb.PutItemInput{
-		Item:                item,
-		TableName:           aws.String("core_user_apps"),
-		ConditionExpression: aws.String("attribute_not_exists(user_)"),
+func CreateOauthUsedCode(code string) error {
+	err := model.UsedOauthCodePut(&model.UsedOauthCode{
+		Code: code,
 	})
 
 	return err
 }
 
-func CreateApp(app *App) error {
-	cfg, _ := config.LoadDefaultConfig(context.TODO())
-	db := dynamodb.NewFromConfig(cfg)
-	item, err := attributevalue.MarshalMap(app)
+func CreateAppToken(app *model.App, code string) (string, error) {
+
+	oauth, err := GetOauthCode(app, code)
 	if err != nil {
-		return fmt.Errorf("Failed to marshall request")
+		return "", err
 	}
 
-	err = CreateUserApp(app.User, app.Name)
-	if err != nil {
-		return err
+	// Double-check
+	if bytes.Compare(oauth.AppId, app.AppId) != 0 {
+		return "", fmt.Errorf("unlucky")
 	}
 
-	_, err = db.PutItem(context.TODO(), &dynamodb.PutItemInput{
-		Item:                item,
-		TableName:           aws.String("core_apps"),
-		ConditionExpression: aws.String("attribute_not_exists(name_)"),
-	})
+	// Guard for race conditions. In worst case, if something fails
+	// after this step, app will have to do the dance again
+	err = CreateOauthUsedCode(code)
+	if err != nil {
+		return "", err
+	}
 
-	return err
+	token, err := CreateToken(oauth.UserId, oauth.AppId)
+	if err != nil {
+		return "", err
+	}
+
+	return token, nil
+}
+
+func Authorize(appId []byte, handle string, password string) (*model.App, string, error) {
+	app, err := GetApp(appId)
+	if app == nil || err != nil {
+		return nil, "", err
+	}
+
+	user, err := GetUserFromHandle(handle)
+	if user == nil || err != nil {
+		return nil, "", err
+	}
+
+	if !VerifyPassword(user, password) {
+		log.Printf("Password error for %s", user)
+		return nil, "", fmt.Errorf("Invalid password")
+	}
+
+	code := CreateAppCode(app, user)
+	if code == "" {
+		return nil, "", fmt.Errorf("Internal Error")
+	}
+
+	return app, code, nil
 }

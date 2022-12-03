@@ -8,6 +8,8 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
+
+	"go.uber.org/zap"
 )
 
 func HandleRequest(ctx context.Context, e events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
@@ -63,5 +65,10 @@ func HandleRequest(ctx context.Context, e events.APIGatewayProxyRequest) (events
 }
 
 func main() {
+	logger, _ := zap.NewProduction()
+	defer logger.Sync()
+	zap.ReplaceGlobals(logger)
+
+	zap.S().Warn("0")
 	lambda.Start(HandleRequest)
 }

@@ -34,4 +34,5 @@ func (f FailCode) ToL() (events.APIGatewayProxyResponse, error) {
 			Body:       "{\"message\": \"RedirectUrl can't be empty\"}",
 		}, nil
 	}
+	panic("oops")
 }

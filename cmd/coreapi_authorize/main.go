@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	_ "embed"
-	"encoding/json"
 	"fmt"
 	"html/template"
 
@@ -37,7 +36,7 @@ func HandlePost(ctx context.Context, e events.APIGatewayProxyRequest) (events.AP
 	clientId := e.QueryStringParameters["client_id"]
 
 	app, code, err := coreops.Authorize(clientId, username, password)
-	if err != nil {
+	if app == nil || code == "" || err != nil {
 		var body bytes.Buffer
 		index.Execute(&body, nil)
 		return events.APIGatewayProxyResponse{
@@ -60,8 +59,6 @@ func HandlePost(ctx context.Context, e events.APIGatewayProxyRequest) (events.AP
 }
 
 func HandleGet(ctx context.Context, e events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	data, _ := json.Marshal(&e)
-
 	var body bytes.Buffer
 	index.Execute(&body, nil)
 	return events.APIGatewayProxyResponse{
@@ -69,7 +66,7 @@ func HandleGet(ctx context.Context, e events.APIGatewayProxyRequest) (events.API
 		Headers: map[string]string{
 			"Content-Type": "text/html",
 		},
-		Body: body.String() + string(data),
+		Body: body.String(),
 	}, nil
 }
 
