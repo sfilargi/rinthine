@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"go.uber.org/zap"
 )
 
 type UserIdxHandle struct {
@@ -35,7 +36,7 @@ func UserIdxHandlePutTx(item *UserIdxHandle) *types.TransactWriteItem {
 func UserIdxHandlePut(item *UserIdxHandle) error {
 	i, err := attributevalue.MarshalMap(item)
 	if err != nil {
-		return err
+		panic(err)
 	}
 
 	_, err = Db.PutItem(context.TODO(), &dynamodb.PutItemInput{
@@ -43,6 +44,9 @@ func UserIdxHandlePut(item *UserIdxHandle) error {
 		TableName:           aws.String("core_users_idx_handle"),
 		ConditionExpression: aws.String("attribute_not_exists(handle_)"),
 	})
+	if err != nil {
+		zap.S().Error(err.Error())
+	}
 	return err
 }
 
@@ -54,6 +58,9 @@ func UserIdxHandleGet(pkey string) (*UserIdxHandle, error) {
 		},
 	})
 	if result.Item == nil || err != nil {
+		if err != nil {
+			zap.S().Error(err.Error())
+		}
 		return nil, err
 	}
 

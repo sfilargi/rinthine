@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"go.uber.org/zap"
 )
 
 type App struct {
@@ -58,6 +59,9 @@ func AppPut(item *App) error {
 		TableName:           aws.String("core_apps"),
 		ConditionExpression: aws.String("attribute_not_exists(app_id_)"),
 	})
+	if err != nil {
+		zap.S().Error(err.Error())
+	}
 
 	return err
 }
@@ -70,6 +74,9 @@ func AppGet(app_id []byte) (*App, error) {
 		},
 	})
 	if result.Item == nil || err != nil {
+		if err != nil {
+			zap.S().Error(err.Error())
+		}
 		return nil, err
 	}
 

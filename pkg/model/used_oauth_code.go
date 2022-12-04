@@ -6,6 +6,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"go.uber.org/zap"
 )
 
 type UsedOauthCode struct {
@@ -23,6 +24,9 @@ func UsedOauthCodePut(item *UsedOauthCode) error {
 		TableName:           aws.String("core_used_oauth_codes"),
 		ConditionExpression: aws.String("attribute_not_exists(code_)"),
 	})
+	if err != nil {
+		zap.S().Error(err.Error())
+	}
 
 	return err
 }

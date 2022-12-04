@@ -35,7 +35,7 @@ func HandleRequest(ctx context.Context, e events.APIGatewayProxyRequest) (events
 		}, nil
 	}
 
-	app, err := coreops.GetApp(appname)
+	app, err := coreops.GetAppFromBase64(appname)
 	if app == nil || err != nil {
 		return events.APIGatewayProxyResponse{
 			StatusCode: 400,

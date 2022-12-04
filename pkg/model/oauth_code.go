@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"go.uber.org/zap"
 )
 
 type OauthCode struct {
@@ -61,6 +62,9 @@ func OauthCodePut(item *OauthCode) error {
 		TableName:           aws.String("core_oauth_codes"),
 		ConditionExpression: aws.String("attribute_not_exists(code_)"),
 	})
+	if err != nil {
+		zap.S().Error(err.Error())
+	}
 
 	return err
 }
@@ -73,6 +77,9 @@ func OauthCodeGet(code string) (*OauthCode, error) {
 		},
 	})
 	if result.Item == nil || err != nil {
+		if err != nil {
+			zap.S().Error(err.Error())
+		}
 		return nil, err
 	}
 

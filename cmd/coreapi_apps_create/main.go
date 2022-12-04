@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/rinthine/pkg/coreops"
+	"github.com/rinthine/pkg/misc"
+	"github.com/rinthine/pkg/model"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
+	"go.uber.org/zap"
 )
 
 type AppCreateRequest struct {
@@ -22,17 +24,19 @@ type AppCreateRequest struct {
 // Password must not be empty
 // Email and Password "validation" is left to front end. We don't care
 // We don't sanitize!
-func verifyInput(req *AppCreateRequest) Failure {
+func verifyInput(req *AppCreateRequest) coreops.Failure {
 	if len(req.Name) < 6 {
-		return InvalidName
+		return coreops.InvalidName
 	}
 	if len(req.RedirectUrl) == 0 {
-		return NoRedirectUrl
+		return coreops.NoRedirectUrl
 	}
 	return nil
 }
 
 func HandleRequest(ctx context.Context, e events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+
+	zap.S().Info("Start")
 
 	var req AppCreateRequest
 	if err := json.Unmarshal([]byte(e.Body), &req); err != nil {
@@ -42,7 +46,7 @@ func HandleRequest(ctx context.Context, e events.APIGatewayProxyRequest) (events
 		}, nil
 	}
 	if f := verifyInput(&req); f != nil {
-		return f
+		return f.ToL()
 	}
 
 	authstring, _ := e.Headers["authorization"]
@@ -62,9 +66,10 @@ func HandleRequest(ctx context.Context, e events.APIGatewayProxyRequest) (events
 		}, nil
 	}
 
-	app := coreops.App{
+	app := model.App{
+		AppId:       coreops.GenId(),
 		Name:        req.Name,
-		User:        user.Handle,
+		UserId:      user.UserId,
 		Description: req.Description,
 		HomeUrl:     req.HomeUrl,
 		RedirectUrl: req.RedirectUrl,
@@ -86,5 +91,6 @@ func HandleRequest(ctx context.Context, e events.APIGatewayProxyRequest) (events
 }
 
 func main() {
+	misc.SetupZap()
 	lambda.Start(HandleRequest)
 }

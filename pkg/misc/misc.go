@@ -6,6 +6,7 @@ import (
 	"net/url"
 
 	"github.com/aws/aws-lambda-go/events"
+	"go.uber.org/zap"
 )
 
 func ParseURLEncoded(s string) (map[string][]string, error) {
@@ -28,4 +29,13 @@ func ParseForm(e events.APIGatewayProxyRequest) (map[string][]string, error) {
 	} else {
 		panic(fmt.Sprintf("Can't handle Content-Type: %+v", e.Headers))
 	}
+}
+
+func SetupZap() {
+	logger, err := zap.NewProduction()
+	if err != nil {
+		panic(err)
+	}
+	defer logger.Sync()
+	zap.ReplaceGlobals(logger)
 }

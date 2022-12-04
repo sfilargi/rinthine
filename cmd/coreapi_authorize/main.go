@@ -84,5 +84,6 @@ func HandleRequest(ctx context.Context, e events.APIGatewayProxyRequest) (events
 }
 
 func main() {
+	misc.SetupZap()
 	lambda.Start(HandleRequest)
 }

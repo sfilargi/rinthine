@@ -8,11 +8,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"go.uber.org/zap"
 )
 
 type User struct {
 	UserId    []byte `json:"user_id" dynamodbav:"user_id_"`
 	Handle    string `json:"handle" dynamodbav:"handle_"`
+	Name      string `json:"name" dynamodbav:"name_"`
 	Email     string `json:"email" dynamodbav:"email_"`
 	Password  string `json:"password" dynamodbav:"password_"`
 	AvatarUrl string `json:"avatar_url" dynamodbav:"avatar_url_"`
@@ -45,6 +47,9 @@ func UserPut(item *User) error {
 			}),
 			*UserPutTx(item),
 		}})
+	if err != nil {
+		zap.S().Error(err.Error())
+	}
 
 	return err
 }

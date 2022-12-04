@@ -25,10 +25,11 @@ func SecureRandUint32() uint32 {
 }
 
 func GenId() []byte {
-	var start uint64 = 1641024000 // 1/1/2022 00:00:00
-	v := ((uint64(time.Now().Unix()) - start) << 32) + uint64(SecureRandUint32())
-	id := make([]byte, 8)
-	binary.LittleEndian.PutUint64(id, v)
+	var start = uint64(time.Date(2020, 02, 02, 02, 02, 02, 0, time.UTC).UnixNano() / 1000)
+	var now = uint64(time.Now().UnixNano() / 1000)
+	id := make([]byte, 12)
+	binary.BigEndian.PutUint64(id[0:], now-start)
+	binary.BigEndian.PutUint32(id[8:], SecureRandUint32())
 	return id
 }
 
@@ -150,11 +151,19 @@ func GetApp(appId []byte) (*model.App, error) {
 	return model.AppGet(appId)
 }
 
+func GetAppFromBase64(encoded string) (*model.App, error) {
+	decoded, err := base64.UrlEncoding.DecodeString(encoded)
+	if err != nil {
+		return nil, err
+	}
+	return GetApp(decoded)
+}
+
 func CreateApp(app *model.App) error {
 	return model.AppPut(app)
 }
 
-func CreateAppCode(app *model.App, user *model.User) string {
+func CreateAppCode(app *model.App, user *model.User) (string, error) {
 
 	code := RandomString(36)
 
@@ -164,10 +173,10 @@ func CreateAppCode(app *model.App, user *model.User) string {
 		UserId: user.UserId,
 	})
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 
-	return code
+	return code, nil
 }
 
 func GetOauthCode(app *model.App, code string) (*model.OauthCode, error) {
@@ -218,8 +227,8 @@ func CreateAppToken(app *model.App, code string) (string, error) {
 	return token, nil
 }
 
-func Authorize(appId []byte, handle string, password string) (*model.App, string, error) {
-	app, err := GetApp(appId)
+func Authorize(appstring, handle string, password string) (*model.App, string, error) {
+	app, err := GetAppFromBase64(appstring)
 	if app == nil || err != nil {
 		return nil, "", err
 	}
@@ -234,8 +243,8 @@ func Authorize(appId []byte, handle string, password string) (*model.App, string
 		return nil, "", fmt.Errorf("Invalid password")
 	}
 
-	code := CreateAppCode(app, user)
-	if code == "" {
+	code, err := CreateAppCode(app, user)
+	if code == "" || err != nil {
 		return nil, "", fmt.Errorf("Internal Error")
 	}
 

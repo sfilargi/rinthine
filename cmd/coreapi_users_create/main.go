@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/rinthine/pkg/coreops"
+	"github.com/rinthine/pkg/model"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -52,7 +53,7 @@ func HandleRequest(ctx context.Context, e events.APIGatewayProxyRequest) (events
 		}, nil
 	}
 
-	existing_user, err := coreops.GetUser(req.Handle)
+	existing_user, err := coreops.GetUserFromHandle(req.Handle)
 	if existing_user != nil || err != nil {
 		body := "handle taken"
 		if err != nil {
@@ -64,7 +65,8 @@ func HandleRequest(ctx context.Context, e events.APIGatewayProxyRequest) (events
 		}, nil
 	}
 
-	user := coreops.User{
+	user := model.User{
+		UserId:    coreops.GenId(),
 		Handle:    req.Handle,
 		Name:      req.Name,
 		Email:     req.Email,
@@ -78,7 +80,7 @@ func HandleRequest(ctx context.Context, e events.APIGatewayProxyRequest) (events
 		}, nil
 	}
 
-	token, err := coreops.CreateUserToken(user.Handle, "")
+	token, err := coreops.CreateToken(user.UserId, nil)
 	if err != nil {
 		// hmm, do we return success or failure here?
 		return events.APIGatewayProxyResponse{

@@ -8,6 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"go.uber.org/zap"
 )
 
 type Token struct {
@@ -64,6 +65,9 @@ func TokenPut(item *Token) error {
 		TableName:           aws.String("core_tokens"),
 		ConditionExpression: aws.String("attribute_not_exists(token_)"),
 	})
+	if err != nil {
+		zap.S().Error(err.Error())
+	}
 
 	return err
 }
@@ -76,6 +80,9 @@ func TokenGet(token string) (*Token, error) {
 		},
 	})
 	if result.Item == nil || err != nil {
+		if err != nil {
+			zap.S().Error(err.Error())
+		}
 		return nil, err
 	}
 

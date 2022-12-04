@@ -7,6 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	//"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"go.uber.org/zap"
 )
 
 type TokenIdxAppId struct {
@@ -17,7 +18,7 @@ type TokenIdxAppId struct {
 func TokenIdxAppIdPut(item *TokenIdxAppId) error {
 	i, err := attributevalue.MarshalMap(item)
 	if err != nil {
-		return err
+		panic(err)
 	}
 
 	_, err = Db.PutItem(context.TODO(), &dynamodb.PutItemInput{
@@ -26,5 +27,8 @@ func TokenIdxAppIdPut(item *TokenIdxAppId) error {
 		ConditionExpression: aws.String(
 			"attribute_not_exists(app_id_) AND attribute_not_exists(token_)"),
 	})
+	if err != nil {
+		zap.S().Error(err.Error())
+	}
 	return err
 }

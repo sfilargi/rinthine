@@ -32,7 +32,7 @@ resource "aws_dynamodb_table" "core_tokens" {
 }
 
 resource "aws_dynamodb_table" "core_tokens_idx_user_id" {
-  name           = "core_app_tokens_idx_user_id"
+  name           = "core_tokens_idx_user_id"
   billing_mode   = "PAY_PER_REQUEST"
   hash_key       = "user_id_"
   range_key      = "token_"
@@ -48,9 +48,8 @@ resource "aws_dynamodb_table" "core_tokens_idx_user_id" {
   }
 }
 
-
 resource "aws_dynamodb_table" "core_tokens_idx_app_id" {
-  name           = "core_app_tokens_idx_app_id"
+  name           = "core_tokens_idx_app_id"
   billing_mode   = "PAY_PER_REQUEST"
   hash_key       = "app_id_"
   range_key      = "token_"
@@ -77,8 +76,8 @@ resource "aws_dynamodb_table" "core_apps" {
   }
 }
 
-resource "aws_dynamodb_table" "core_apps_idx_userid" {
-  name           = "core_apps_idx_userid"
+resource "aws_dynamodb_table" "core_apps_idx_user_id" {
+  name           = "core_apps_idx_user_id"
   billing_mode   = "PAY_PER_REQUEST"
   hash_key       = "user_id_"
   range_key      = "app_id_"
@@ -105,8 +104,8 @@ resource "aws_dynamodb_table" "core_oauth_codes" {
   }
 }
 
-resource "aws_dynamodb_table" "core_oauth_codes_idx_appid" {
-  name           = "core_oauth_codes_idx_appid"
+resource "aws_dynamodb_table" "core_oauth_codes_idx_app_id" {
+  name           = "core_oauth_codes_idx_app_id"
   billing_mode   = "PAY_PER_REQUEST"
   hash_key       = "app_id_"
   range_key      = "code_"
@@ -115,6 +114,34 @@ resource "aws_dynamodb_table" "core_oauth_codes_idx_appid" {
     name = "app_id_"
     type = "B"
   }
+
+  attribute {
+    name = "code_"
+    type = "S"
+  }
+}
+
+resource "aws_dynamodb_table" "core_oauth_codes_idx_user_id" {
+  name           = "core_oauth_codes_idx_user_id"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "user_id_"
+  range_key      = "code_"
+
+  attribute {
+    name = "user_id_"
+    type = "B"
+  }
+
+  attribute {
+    name = "code_"
+    type = "S"
+  }
+}
+
+resource "aws_dynamodb_table" "core_used_oauth_codes" {
+  name           = "core_used_oauth_codes"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "code_"
 
   attribute {
     name = "code_"

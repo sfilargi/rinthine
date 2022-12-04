@@ -25,7 +25,7 @@ func HandleRequest(ctx context.Context, e events.APIGatewayProxyRequest) (events
 		}, nil
 	}
 
-	user, err := coreops.GetUser(req.Handle)
+	user, err := coreops.GetUserFromHandle(req.Handle)
 	if user == nil || err != nil {
 		return events.APIGatewayProxyResponse{
 			StatusCode: 400,
@@ -40,7 +40,7 @@ func HandleRequest(ctx context.Context, e events.APIGatewayProxyRequest) (events
 		}, nil
 	}
 
-	token, err := coreops.CreateUserToken(user.Handle, "")
+	token, err := coreops.CreateToken(user.UserId, nil)
 	if err != nil {
 		// hmm, do we return success or failure here?
 		return events.APIGatewayProxyResponse{
